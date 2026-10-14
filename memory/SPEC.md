@@ -26,3 +26,7 @@ Sem dados mock: tudo do banco, empty states quando vazio.
   AssemblyAI recebe o arquivo via /v2/upload; Shotstack lê via {APP_URL}/api/files/<arquivo>. APP_URL precisa ser a URL pública.
 - Legendas Shotstack: asset type=caption src=alias://main; posição no nível do clip (position=bottom, offset.y=0.15).
 - Teste real: vídeo de 3:33 → 5 cortes 720x1280 em ~2min20s.
+- yt-dlp: tenta 1º MP4 combinado (formato 18, não exige PO token) e depois DASH vídeo+áudio com merge (ffmpeg via pip imageio-ffmpeg).
+  YouTube aplica anti-bot (HTTP 403 / "confirm you're not a bot") a vários vídeos vindos de IP de datacenter → erro amigável + estorno.
+  Contornos opcionais em backend/.env: YOUTUBE_COOKIES_FILE=/caminho/cookies.txt (Netscape) e YTDLP_PROXY=http://user:pass@host:porta (proxy residencial).
+- Upload local de MP4 testado com APIs reais (5 cortes em ~2min) — é o caminho garantido.

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import sys
 import uuid
@@ -44,17 +45,67 @@ async def youtube_title(url: str) -> str:
     return "Vídeo do YouTube"
 
 
+# YouTube often serves only split video/audio streams (no muxed mp4), so we merge with a pip-bundled ffmpeg.
+# Try muxed mp4 first (no PO token needed), then split DASH video+audio merged with ffmpeg.
+# yt-dlp does not fall back to the next format when a download 403s, so we loop ourselves.
+YT_FORMATS = (
+    "b[ext=mp4][height<=720]/b[ext=mp4]",
+    "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=720]+ba",
+)
+
+
+def _ffmpeg_exe() -> str:
+    import imageio_ffmpeg
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def _ytdlp_auth_args() -> list[str]:
+    """Optional anti-bot workarounds: YOUTUBE_COOKIES_FILE (Netscape cookies.txt) and YTDLP_PROXY."""
+    args: list[str] = []
+    cookies = os.environ.get("YOUTUBE_COOKIES_FILE", "").strip()
+    if cookies and Path(cookies).is_file():
+        args += ["--cookies", cookies]
+    proxy = os.environ.get("YTDLP_PROXY", "").strip()
+    if proxy:
+        args += ["--proxy", proxy]
+    return args
+
+
+YT_BLOCKED_MSG = (
+    "O YouTube bloqueou o download deste vídeo a partir do servidor (proteção anti-bot). "
+    "Envie o arquivo MP4 pela aba Upload ou tente outro link."
+)
+
+
+def _ytdlp_error(err: bytes) -> ProviderError:
+    text = err.decode(errors="ignore")
+    if re.search(r"HTTP Error 403|not a bot|Sign in to confirm|ffmpeg exited", text):
+        return ProviderError(YT_BLOCKED_MSG)
+    if "Requested format is not available" in text:
+        return ProviderError("Nenhum formato de vídeo disponível para este link do YouTube.")
+    if re.search(r"Private video|Video unavailable|members-only|age", text, re.I):
+        return ProviderError("Este vídeo do YouTube é privado, restrito ou indisponível.")
+    lines = text.strip().splitlines()
+    return ProviderError(f"Não foi possível baixar o vídeo do YouTube: {(lines[-1] if lines else 'erro desconhecido')[:200]}")
+
+
 async def ytdlp_download(url: str, dest: Path) -> Path:
     """Download the video locally (googlevideo URLs are IP-bound, so providers can't fetch them)."""
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "-f", "best[ext=mp4][height<=720]/best[ext=mp4]/best", "--no-playlist",
-        "--max-filesize", "500M", "-o", str(dest), url,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    _, err = await asyncio.wait_for(proc.communicate(), timeout=900)
-    if proc.returncode != 0 or not dest.is_file():
-        raise ProviderError(f"Não foi possível baixar o vídeo do YouTube: {err.decode()[-200:]}")
-    return dest
+    err = b""
+    for fmt in YT_FORMATS:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "--no-playlist", *_ytdlp_auth_args(),
+            "-f", fmt, "--merge-output-format", "mp4", "--ffmpeg-location", _ffmpeg_exe(),
+            "--max-filesize", "2G", "--abort-on-unavailable-fragments", "-o", str(dest), url,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=1800)
+        if proc.returncode == 0 and dest.is_file():
+            return dest
+        logger.warning("yt-dlp format %s failed: %s", fmt, err.decode(errors="ignore")[-300:])
+        for leftover in dest.parent.glob(f"{dest.stem}*"):
+            leftover.unlink(missing_ok=True)
+    raise _ytdlp_error(err)
 
 
 async def ytdlp_direct_url(url: str, fmt: str) -> str:
@@ -74,8 +125,13 @@ async def assembly_transcribe(audio_url: str | None = None, file_path: Path | No
     headers = {"authorization": assemblyai_key()}
     async with httpx.AsyncClient(timeout=120) as client:
         if file_path is not None:
-            with file_path.open("rb") as fh:
-                up = await client.post(f"{ASSEMBLY_BASE}/upload", headers=headers, content=fh.read())
+            async def chunks():
+                with file_path.open("rb") as fh:
+                    while chunk := fh.read(5 * 1024 * 1024):
+                        yield chunk
+
+            up = await client.post(f"{ASSEMBLY_BASE}/upload", headers=headers, content=chunks(),
+                                   timeout=httpx.Timeout(120, write=1800))
             if up.status_code != 200:
                 raise ProviderError(f"AssemblyAI upload falhou ({up.status_code})")
             audio_url = up.json()["upload_url"]
@@ -95,7 +151,7 @@ async def assembly_transcribe(audio_url: str | None = None, file_path: Path | No
     raise ProviderError("AssemblyAI: tempo de transcrição excedido")
 
 
-def transcript_to_timed_text(data: dict, max_chars: int = 30000) -> str:
+def transcript_to_timed_text(data: dict, max_chars: int = 150000) -> str:
     """Group words into ~10s lines '[start-end] text' for the LLM."""
     words = data.get("words") or []
     lines, buf, start = [], [], None
