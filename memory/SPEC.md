@@ -19,3 +19,10 @@ GET /api/connections/verify — status real das 3 chaves (latência, modo real/s
 ## Páginas
 /login, /register, / (Novo Projeto + projetos recentes + resumo + cortes gerados), /cortes (biblioteca com filtro), /conexoes.
 Sem dados mock: tudo do banco, empty states quando vazio.
+
+## Status das integrações (atualizado)
+- ASSEMBLYAI_API_KEY e SHOTSTACK_API_KEY configuradas em backend/.env; SHOTSTACK_ENV=v1 (chave de PRODUÇÃO — cada render consome créditos Shotstack).
+- YouTube: yt-dlp (+ yt-dlp-ejs, --js-runtimes node) BAIXA o vídeo para backend/uploads/yt-{project_id}.mp4 (URLs googlevideo são presas ao IP do servidor).
+  AssemblyAI recebe o arquivo via /v2/upload; Shotstack lê via {APP_URL}/api/files/<arquivo>. APP_URL precisa ser a URL pública.
+- Legendas Shotstack: asset type=caption src=alias://main; posição no nível do clip (position=bottom, offset.y=0.15).
+- Teste real: vídeo de 3:33 → 5 cortes 720x1280 em ~2min20s.

@@ -58,14 +58,23 @@ async def fail_project(project_id: str, reason: str) -> None:
     await refund(project_id)
 
 
-def _upload_path(project: dict) -> Path:
-    return UPLOAD_DIR / project["video_url"].rsplit("/", 1)[-1]
+def local_media_name(project: dict) -> str:
+    if project["source_type"] == "upload":
+        return project["video_url"].rsplit("/", 1)[-1]
+    return f"yt-{project['id']}.mp4"
+
+
+async def ensure_local_media(project: dict) -> Path:
+    path = UPLOAD_DIR / local_media_name(project)
+    if project["source_type"] == "youtube" and not path.is_file():
+        await _set(project["id"], stage="Baixando vídeo do YouTube", progress=10)
+        await providers.ytdlp_download(project["video_url"], path)
+    return path
 
 
 async def _render_source(project: dict) -> str:
-    if project["source_type"] == "upload":
-        return f"{public_base_url()}{project['video_url']}"
-    return await providers.ytdlp_direct_url(project["video_url"], "best[ext=mp4]/best")
+    await ensure_local_media(project)
+    return f"{public_base_url()}/api/files/{local_media_name(project)}"
 
 
 async def render_clip(clip: dict, project: dict, src_url: str | None = None) -> None:
@@ -94,14 +103,12 @@ async def _pipeline(project_id: str) -> None:
     if not project:
         return
     try:
-        await _set(project_id, status="processing", stage="Transcrevendo áudio", progress=15, error=None)
+        await _set(project_id, status="processing", stage="Preparando mídia", progress=8, error=None)
         timed_text = None
         if assemblyai_key():
-            if project["source_type"] == "upload":
-                data = await providers.assembly_transcribe(file_path=_upload_path(project))
-            else:
-                audio = await providers.ytdlp_direct_url(project["video_url"], "bestaudio/best")
-                data = await providers.assembly_transcribe(audio_url=audio)
+            media = await ensure_local_media(project)
+            await _set(project_id, stage="Transcrevendo áudio", progress=20)
+            data = await providers.assembly_transcribe(file_path=media)
             timed_text = providers.transcript_to_timed_text(data)
             total = (data.get("audio_duration") or 0) or None
         else:

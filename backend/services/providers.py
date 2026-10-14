@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import sys
 import uuid
 from pathlib import Path
 
@@ -43,9 +44,22 @@ async def youtube_title(url: str) -> str:
     return "Vídeo do YouTube"
 
 
+async def ytdlp_download(url: str, dest: Path) -> Path:
+    """Download the video locally (googlevideo URLs are IP-bound, so providers can't fetch them)."""
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "-f", "best[ext=mp4][height<=720]/best[ext=mp4]/best", "--no-playlist",
+        "--max-filesize", "500M", "-o", str(dest), url,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    _, err = await asyncio.wait_for(proc.communicate(), timeout=900)
+    if proc.returncode != 0 or not dest.is_file():
+        raise ProviderError(f"Não foi possível baixar o vídeo do YouTube: {err.decode()[-200:]}")
+    return dest
+
+
 async def ytdlp_direct_url(url: str, fmt: str) -> str:
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "-g", "-f", fmt, "--no-playlist", url,
+        sys.executable, "-m", "yt_dlp", "--js-runtimes", "node", "-g", "-f", fmt, "--no-playlist", url,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     out, err = await asyncio.wait_for(proc.communicate(), timeout=90)
@@ -190,8 +204,8 @@ async def shotstack_render(src_url: str, start: float, end: float) -> str:
             "tracks": [
                 {"clips": [{"asset": {"type": "caption", "src": "alias://main",
                                       "font": {"color": "#ffffff", "size": 44},
-                                      "background": {"color": "#000000", "opacity": 0.55, "padding": 18, "borderRadius": 12},
-                                      "position": "bottom", "margin": {"bottom": 0.18}},
+                                      "background": {"color": "#000000", "opacity": 0.55, "padding": 18, "borderRadius": 12}},
+                            "position": "bottom", "offset": {"y": 0.15},
                             "start": 0, "length": "end"}]},
                 {"clips": [{"alias": "main", "asset": {"type": "video", "src": src_url, "trim": start},
                             "start": 0, "length": length, "fit": "crop"}]},

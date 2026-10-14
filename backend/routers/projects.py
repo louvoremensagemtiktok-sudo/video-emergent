@@ -129,8 +129,7 @@ async def delete_project(project_id: str, user: dict = Depends(get_current_user)
         await pipeline.refund(project_id)
     await db.clips.delete_many({"project_id": project_id})
     await db.projects.delete_one({"id": project_id})
-    if proj["source_type"] == "upload":
-        (pipeline.UPLOAD_DIR / proj["video_url"].rsplit("/", 1)[-1]).unlink(missing_ok=True)
+    (pipeline.UPLOAD_DIR / pipeline.local_media_name(proj)).unlink(missing_ok=True)
     return MessageOut(message="Projeto excluído")
 
 
