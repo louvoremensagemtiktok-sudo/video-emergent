@@ -1,0 +1,177 @@
+{
+  "project_name": "VIDEOS IA VIRAIS",
+  "app_type": "saas_app",
+  "target_locale": "pt-BR",
+  "archetype": "THE PERFORMANCE PRO / CYBER ELECTRIC STUDIO",
+  "theme_preference": "dark_primary_with_theme_support",
+  "typography": {
+    "heading_font": "Sora Variable",
+    "body_font": "Plus Jakarta Sans Variable",
+    "mono_font": "JetBrains Mono Variable",
+    "imports": [
+      "@import \"@fontsource-variable/sora\";",
+      "@import \"@fontsource-variable/plus-jakarta-sans\";",
+      "@import \"@fontsource-variable/jetbrains-mono\";"
+    ],
+    "scale_px": {
+      "display": 56,
+      "h1": 40,
+      "h2": 30,
+      "h3": 22,
+      "body": 16,
+      "caption": 14
+    },
+    "typesetting": {
+      "headline_tracking": "tracking-tight",
+      "overline_tracking": "tracking-[0.18em]",
+      "body_line_height": "leading-relaxed"
+    }
+  },
+  "colors": {
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#0B0F17",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E293B",
+          "link": "#38BDF8",
+          "success": "#22C55E",
+          "error": "#F43F5E",
+          "warning": "#F59E0B"
+        }
+      },
+      {
+        "name": "panel",
+        "kind": "solid",
+        "bg": "#111827",
+        "on_bg": "#F9FAFB",
+        "on_bg_muted": "#9CA3AF",
+        "roles": {
+          "border": "#1F2937",
+          "accent_border": "#0284C7",
+          "glow": "#0284C7"
+        }
+      },
+      {
+        "name": "card_active",
+        "kind": "solid",
+        "bg": "#162032",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#2563EB",
+          "badge_bg": "#0369A1",
+          "badge_text": "#E0F2FE"
+        }
+      },
+      {
+        "name": "hero_banner",
+        "kind": "gradient",
+        "contrast_against": "#080C14",
+        "guarantee": "scrim: linear-gradient(135deg, rgba(11,15,23,0.95) 0%, rgba(17,24,39,0.92) 100%)",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#CBD5E1",
+        "roles": {
+          "tagline": "#38BDF8",
+          "accent_pill": "#0284C7"
+        }
+      },
+      {
+        "name": "credit_pill",
+        "kind": "solid",
+        "bg": "#1E1B4B",
+        "on_bg": "#E0E7FF",
+        "on_bg_muted": "#A5B4FC",
+        "roles": {
+          "border": "#4338CA",
+          "highlight": "#6366F1"
+        }
+      },
+      {
+        "name": "viral_badge_high",
+        "kind": "solid",
+        "bg": "#064E3B",
+        "on_bg": "#ECFDF5",
+        "on_bg_muted": "#A7F3D0"
+      },
+      {
+        "name": "viral_badge_medium",
+        "kind": "solid",
+        "bg": "#78350F",
+        "on_bg": "#FFFBEB",
+        "on_bg_muted": "#FDE68A"
+      },
+      {
+        "name": "viral_badge_low",
+        "kind": "solid",
+        "bg": "#4C1D95",
+        "on_bg": "#FAF5FF",
+        "on_bg_muted": "#DDD6FE"
+      }
+    ],
+    "accent": "#0284C7",
+    "on_accent": "#FFFFFF",
+    "kinetic_electric": "#38BDF8",
+    "brand_gradient": "from-sky-500 via-indigo-500 to-emerald-400"
+  },
+  "entry_surfaces": {
+    "/": "focused creator studio dashboard — centered top import card with integrated credit pill, followed immediately by active processing feed and recent projects without middle dead space",
+    "/login": "split branded auth screen — left showcase panel with 9:16 clip virality preview, right high-contrast login card with pt-BR validation",
+    "/register": "split branded auth screen — left benefits panel (50 créditos gratuitos, transcrição AssemblyAI, hooks virais), right registration form",
+    "/cortes": "high-density 9:16 vertical clip showcase grid with instant viral score badges (0-100), fast hashtag copy, download MP4 and explicit action triggers",
+    "/conexoes": "service health matrix with live real-time API status check cards (AssemblyAI, Shotstack, OpenAI), key simulation badge toggle and credit refill"
+  },
+  "grids": {
+    "dashboard_mode": "High Density Grid (Mode B) with 0 dead space: compact top creator hub (col-span-full), live processing list (col-span-full lg:col-span-8), and credit / quick stats summary (col-span-full lg:col-span-4)",
+    "clips_library_mode": "Responsive 9:16 Vertical Card Grid: grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6",
+    "connections_grid": "3-column status grid (grid-cols-1 md:grid-cols-3 gap-6) with detailed latency, test button, and connection badges"
+  },
+  "layouts": {
+    "navigation_bar": "Sticky top bar (backdrop-blur-xl bg-slate-950/80 border-b border-slate-800 z-50) with Brand Logo 'VIDEOS IA VIRAIS' + Live Credit Badge [50 Créditos] + Nav Links (Novo Projeto, Meus Cortes, Conexões) + User profile trigger",
+    "import_card_solution": "Directly solves problem statement: Centered at top, sleek tabbed input for [YouTube URL] and [Upload Local], clip duration toggle [30s | 60s | Automático], embedded credit notice badge ('Custa 3 créditos • Reembolso automático se falhar') INSIDE the card body next to primary button so it takes ZERO extra vertical pushdown, no middle blank space",
+    "empty_states": "Warm, engaging empty state with animated film reel illustration, friendly Brazilian Portuguese copy ('Nenhum corte gerado ainda. Cole um link do YouTube ou envie um vídeo acima para extrair seus primeiros shorts virais!'), and direct CTA"
+  },
+  "motion": {
+    "library": "motion (from motion/react)",
+    "transitions": "transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, border-color 0.2s ease",
+    "hover_lift": "hover:-translate-y-1 hover:shadow-[0_12px_28px_rgba(2,132,199,0.18)]",
+    "score_pulse": "subtle breathing glow animation on viral score >= 85",
+    "progress_bar": "smooth animated striped progress fill during transcription & rendering"
+  },
+  "accessibility": {
+    "contrast_standard": "APCA & WCAG AA minimum 4.5:1 on all text surfaces",
+    "data_testid_policy": "All interactive inputs, buttons, score badges, status pills, and action items must carry kebab-case data-testid attributes (e.g. data-testid='input-youtube-url', data-testid='btn-extrair-cortes', data-testid='badge-creditos-header', data-testid='btn-excluir-corte', data-testid='btn-refazer-corte', data-testid='btn-cancelar-processamento', data-testid='btn-copiar-hashtags', data-testid='btn-download-mp4')",
+    "focus_states": "focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 outline-none"
+  },
+  "media": {
+    "image_urls": {
+      "editor_preview_screen": "https://images.unsplash.com/photo-1614963326505-843868e1d83a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHw0fHx2aWRlbyUyMGNyZWF0b3IlMjBlZGl0aW5nJTIwc3R1ZGlvfGVufDB8fHx8MTc5MTk0Mzc3MXww&ixlib=rb-4.1.0&q=85",
+      "creator_workspace": "https://images.unsplash.com/photo-1490810194309-344b3661ba39?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHx2aWRlbyUyMGNyZWF0b3IlMjBlZGl0aW5nJTIwc3R1ZGlvfGVufDB8fHx8MTc5MTk0Mzc3MXww&ixlib=rb-4.1.0&q=85"
+    }
+  },
+  "component_hierarchy": {
+    "layout": "frontend/src/components/Layout/AppLayout.tsx",
+    "navbar": "frontend/src/components/Navigation/Navbar.tsx",
+    "import_form": "frontend/src/components/Dashboard/ImportProjectCard.tsx",
+    "project_feed": "frontend/src/components/Dashboard/ProjectStatusList.tsx",
+    "clip_card": "frontend/src/components/Clips/ClipCard.tsx",
+    "clip_grid": "frontend/src/components/Clips/ClipsGrid.tsx",
+    "clip_preview_dialog": "frontend/src/components/Clips/ClipPreviewModal.tsx",
+    "connections_panel": "frontend/src/components/Connections/ConnectionsPanel.tsx",
+    "credit_badge": "frontend/src/components/Common/CreditBadge.tsx",
+    "empty_state": "frontend/src/components/Common/EmptyState.tsx"
+  },
+  "instructions_to_main_agent": [
+    "Language & Locale: Brazilian Portuguese (pt-BR) throughout all screens, labels, toasts, and error messages.",
+    "Solve UI Layout Bugs explicitly: Eliminate middle blank space. Position 'Novo Projeto' container centered and at the very top of the Dashboard. Integrate the credit indicator (e.g. '3 créditos • Saldo: 50') right inside the action zone of the form without breaking or expanding vertical rhythm.",
+    "Clip Card Actions: Each generated clip card MUST contain functional explicit buttons: [Excluir], [Refazer], [Cancelar Processamento] (when processing), [Copiar Hashtags], and [Download MP4].",
+    "Viral Score Component: Render a prominent circular or badge gauge (0-100) with color coding (Green 80-100 Viral, Amber 60-79 Promissor, Purple <60 Regular), plus AI Hook and magnetic title.",
+    "DB / Empty State: No hardcoded fake clips array in frontend. Load exclusively from DB. When empty, render a modern, helpful empty state card with guidance.",
+    "Credit Mechanics: New users get 50 credits. Processing costs 3 credits. If backend simulation or processing fails, refund 3 credits with clear toast feedback.",
+    "Conexões Page: Test AssemblyAI, Shotstack, and OpenAI API keys with real-time test button & latency indicators. If keys are missing or invalid, display a sleek 'Modo Simulação Ativo' badge.",
+    "Format 9:16: All video preview players and thumbnail cards must use strict vertical aspect-ratio (aspect-[9/16]) with overlay subtitles preview option (Hormozi style / Minimalist)."
+  ]
+}

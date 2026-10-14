@@ -1,0 +1,178 @@
+"""process-video pipeline: credits → transcription → viral analysis → render → clips. Refunds on failure."""
+
+import asyncio
+import logging
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+from lib.db import db
+from lib.keys import assemblyai_key, public_base_url, shotstack_key
+from services import providers
+from services.providers import ProviderError
+
+logger = logging.getLogger(__name__)
+
+COST = 3
+UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+# In-memory task registry so cancel can stop a running job.
+_project_tasks: dict[str, asyncio.Task] = {}
+_clip_tasks: dict[str, asyncio.Task] = {}
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def charge(user_id: str) -> int | None:
+    """Atomically take COST credits; None when the balance is insufficient."""
+    doc = await db.profiles.find_one_and_update(
+        {"user_id": user_id, "credits": {"$gte": COST}}, {"$inc": {"credits": -COST}},
+        return_document=True, projection={"_id": 0, "credits": 1},
+    )
+    return doc["credits"] if doc else None
+
+
+async def refund(project_id: str) -> bool:
+    """Idempotent: only refunds if the project is still marked as charged."""
+    proj = await db.projects.find_one_and_update(
+        {"id": project_id, "charged": True}, {"$set": {"charged": False, "refunded": True}}
+    )
+    if not proj:
+        return False
+    await db.profiles.update_one({"user_id": proj["user_id"]}, {"$inc": {"credits": COST}})
+    return True
+
+
+async def _set(project_id: str, **fields) -> None:
+    await db.projects.update_one({"id": project_id}, {"$set": fields})
+
+
+async def fail_project(project_id: str, reason: str) -> None:
+    await _set(project_id, status="failed", stage="Falhou", error=reason)
+    await db.clips.update_many(
+        {"project_id": project_id, "status": "processing"}, {"$set": {"status": "error", "error": reason}}
+    )
+    await refund(project_id)
+
+
+def _upload_path(project: dict) -> Path:
+    return UPLOAD_DIR / project["video_url"].rsplit("/", 1)[-1]
+
+
+async def _render_source(project: dict) -> str:
+    if project["source_type"] == "upload":
+        return f"{public_base_url()}{project['video_url']}"
+    return await providers.ytdlp_direct_url(project["video_url"], "best[ext=mp4]/best")
+
+
+async def render_clip(clip: dict, project: dict, src_url: str | None = None) -> None:
+    """Render one clip; real Shotstack when a key exists, otherwise simulation."""
+    try:
+        if shotstack_key():
+            src = src_url or await _render_source(project)
+            url = await providers.shotstack_render(src, clip["start_time"], clip["end_time"])
+            fields = {"status": "ready", "download_url": url, "preview_url": url, "error": None, "simulated": False}
+        elif project["source_type"] == "upload":
+            base = project["video_url"]
+            fields = {"status": "ready", "download_url": base,
+                      "preview_url": f"{base}#t={clip['start_time']},{clip['end_time']}", "error": None, "simulated": True}
+        else:
+            fields = {"status": "ready", "download_url": None, "preview_url": None, "error": None, "simulated": True}
+        await db.clips.update_one({"id": clip["id"]}, {"$set": fields})
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("render clip %s failed: %s", clip["id"], exc)
+        await db.clips.update_one({"id": clip["id"]}, {"$set": {"status": "error", "error": str(exc)[:300]}})
+
+
+async def _pipeline(project_id: str) -> None:
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        return
+    try:
+        await _set(project_id, status="processing", stage="Transcrevendo áudio", progress=15, error=None)
+        timed_text = None
+        if assemblyai_key():
+            if project["source_type"] == "upload":
+                data = await providers.assembly_transcribe(file_path=_upload_path(project))
+            else:
+                audio = await providers.ytdlp_direct_url(project["video_url"], "bestaudio/best")
+                data = await providers.assembly_transcribe(audio_url=audio)
+            timed_text = providers.transcript_to_timed_text(data)
+            total = (data.get("audio_duration") or 0) or None
+        else:
+            await asyncio.sleep(1.5)
+            total = None
+
+        await _set(project_id, stage="Analisando viralidade com IA", progress=45)
+        moments = await providers.analyze_viral_moments(project["title"], timed_text, project["duration_mode"], total)
+
+        await _set(project_id, stage="Renderizando cortes 9:16", progress=70)
+        clips = []
+        for m in moments:
+            clip = {
+                "id": str(uuid.uuid4()), "project_id": project_id, "user_id": project["user_id"],
+                **m, "download_url": None, "preview_url": None,
+                "source_url": project["video_url"], "source_type": project["source_type"],
+                "status": "processing", "error": None, "simulated": project["simulated"], "created_at": now(),
+            }
+            clips.append(clip)
+        if clips:
+            await db.clips.insert_many([dict(c) for c in clips])
+
+        src = await _render_source(project) if shotstack_key() else None
+        await asyncio.gather(*(render_clip(c, project, src) for c in clips))
+
+        ready = await db.clips.count_documents({"project_id": project_id, "status": "ready"})
+        if ready == 0:
+            await fail_project(project_id, "Renderização falhou para todos os cortes — créditos estornados")
+            return
+        await _set(project_id, status="completed", stage="Concluído", progress=100)
+    except asyncio.CancelledError:
+        logger.info("project %s cancelled", project_id)
+        raise
+    except ProviderError as exc:
+        await fail_project(project_id, f"{exc} — créditos estornados")
+    except Exception as exc:
+        logger.exception("pipeline crash %s", project_id)
+        await fail_project(project_id, f"Erro inesperado: {str(exc)[:200]} — créditos estornados")
+    finally:
+        _project_tasks.pop(project_id, None)
+
+
+def start_pipeline(project_id: str) -> None:
+    _project_tasks[project_id] = asyncio.create_task(_pipeline(project_id))
+
+
+def cancel_pipeline(project_id: str) -> None:
+    task = _project_tasks.pop(project_id, None)
+    if task:
+        task.cancel()
+
+
+async def _clip_job(clip: dict, project: dict) -> None:
+    try:
+        await render_clip(clip, project)
+    finally:
+        _clip_tasks.pop(clip["id"], None)
+
+
+def start_clip_render(clip: dict, project: dict) -> None:
+    _clip_tasks[clip["id"]] = asyncio.create_task(_clip_job(clip, project))
+
+
+def cancel_clip_render(clip_id: str) -> None:
+    task = _clip_tasks.pop(clip_id, None)
+    if task:
+        task.cancel()
+
+
+async def recover_stale_jobs() -> None:
+    """After a restart, in-flight jobs are gone: fail them and refund."""
+    async for p in db.projects.find({"status": {"$in": ["pending", "processing"]}}, {"_id": 0, "id": 1}):
+        await fail_project(p["id"], "Processamento interrompido pelo servidor — créditos estornados")
+    await db.clips.update_many({"status": "processing"}, {"$set": {"status": "error", "error": "Renderização interrompida"}})
