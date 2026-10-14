@@ -30,3 +30,5 @@ Sem dados mock: tudo do banco, empty states quando vazio.
   YouTube aplica anti-bot (HTTP 403 / "confirm you're not a bot") a vários vídeos vindos de IP de datacenter → erro amigável + estorno.
   Contornos opcionais em backend/.env: YOUTUBE_COOKIES_FILE=/caminho/cookies.txt (Netscape) e YTDLP_PROXY=http://user:pass@host:porta (proxy residencial).
 - Upload local de MP4 testado com APIs reais (5 cortes em ~2min) — é o caminho garantido.
+- Project.error_code (Optional["youtube_blocked"]): setado pelo pipeline via ProviderError(code=...), limpo no retry/início.
+  Dashboard: projeto com youtube_blocked mostra aviso âmbar + botão "Enviar MP4 em vez disso" (btn-enviar-mp4-em-vez) → aba Upload ativa, scroll até #novo-projeto e pulso (animate-attention) por ~2.4s. Estado da aba elevado para Dashboard.

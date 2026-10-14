@@ -14,11 +14,19 @@ const DURATIONS: { value: DurationMode; label: string }[] = [
 ];
 const YT_RE = /(youtube\.com\/(watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)[\w-]{11}/;
 
-export function ImportProjectCard() {
+export type ImportSource = "youtube" | "upload";
+
+interface ImportProjectCardProps {
+  source: ImportSource;
+  onSourceChange: (s: ImportSource) => void;
+  /** Pulses the card/dropzone when the user is sent here from a blocked YouTube project. */
+  highlight?: boolean;
+}
+
+export function ImportProjectCard({ source, onSourceChange, highlight = false }: ImportProjectCardProps) {
   const me = useMe();
   const createProject = useCreateProject();
   const uploadProject = useUploadProject();
-  const [source, setSource] = useState<"youtube" | "upload">("youtube");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState<DurationMode>("auto");
@@ -47,8 +55,10 @@ export function ImportProjectCard() {
 
   return (
     <section
+      id="novo-projeto"
       data-testid="import-project-card"
-      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-800 bg-[linear-gradient(135deg,rgba(11,15,23,0.95)_0%,rgba(17,24,39,0.92)_100%)] p-5 shadow-[0_20px_60px_-20px_rgba(2,132,199,0.35)] sm:p-7"
+      data-highlight={highlight || undefined}
+      className="relative mx-auto w-full scroll-mt-24 transition-shadow duration-500 data-[highlight]:animate-attention max-w-4xl overflow-hidden rounded-2xl border border-slate-800 bg-[linear-gradient(135deg,rgba(11,15,23,0.95)_0%,rgba(17,24,39,0.92)_100%)] p-5 shadow-[0_20px_60px_-20px_rgba(2,132,199,0.35)] sm:p-7"
     >
       <div className="pointer-events-none absolute -top-24 -right-24 size-64 rounded-full bg-sky-500/10 blur-3xl" />
       <div className="relative flex flex-wrap items-end justify-between gap-3">
@@ -64,7 +74,7 @@ export function ImportProjectCard() {
               role="tab"
               aria-selected={source === s}
               data-testid={`tab-source-${s}`}
-              onClick={() => setSource(s)}
+              onClick={() => onSourceChange(s)}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 transition-colors duration-200",
                 source === s && "bg-sky-600 text-white",
@@ -103,7 +113,10 @@ export function ImportProjectCard() {
               const f = e.dataTransfer.files?.[0];
               if (f) setFile(f);
             }}
-            className="flex h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/70 px-4 text-sm text-slate-400 transition-colors duration-200 hover:border-sky-500"
+            className={cn(
+              "flex h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 text-sm text-slate-400 transition-colors duration-200 hover:border-sky-500",
+              highlight ? "border-sky-400 bg-sky-950/40 text-sky-100" : "border-slate-700 bg-slate-950/70",
+            )}
           >
             <Upload className="size-4 shrink-0 text-sky-400" />
             <span data-testid="upload-file-name" className="flex-1 truncate">

@@ -50,8 +50,8 @@ async def _set(project_id: str, **fields) -> None:
     await db.projects.update_one({"id": project_id}, {"$set": fields})
 
 
-async def fail_project(project_id: str, reason: str) -> None:
-    await _set(project_id, status="failed", stage="Falhou", error=reason)
+async def fail_project(project_id: str, reason: str, code: str | None = None) -> None:
+    await _set(project_id, status="failed", stage="Falhou", error=reason, error_code=code)
     await db.clips.update_many(
         {"project_id": project_id, "status": "processing"}, {"$set": {"status": "error", "error": reason}}
     )
@@ -103,7 +103,7 @@ async def _pipeline(project_id: str) -> None:
     if not project:
         return
     try:
-        await _set(project_id, status="processing", stage="Preparando mídia", progress=8, error=None)
+        await _set(project_id, status="processing", stage="Preparando mídia", progress=8, error=None, error_code=None)
         timed_text = None
         if assemblyai_key():
             media = await ensure_local_media(project)
@@ -143,7 +143,7 @@ async def _pipeline(project_id: str) -> None:
         logger.info("project %s cancelled", project_id)
         raise
     except ProviderError as exc:
-        await fail_project(project_id, f"{exc} — créditos estornados")
+        await fail_project(project_id, f"{exc} — créditos estornados", exc.code)
     except Exception as exc:
         logger.exception("pipeline crash %s", project_id)
         await fail_project(project_id, f"Erro inesperado: {str(exc)[:200]} — créditos estornados")

@@ -44,6 +44,7 @@ class Project(BaseModel):
     progress: int
     duration_mode: DurationMode
     error: Optional[str] = None
+    error_code: Optional[Literal["youtube_blocked"]] = None
     simulated: bool
     clips_count: int = 0
     created_at: datetime

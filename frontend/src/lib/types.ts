@@ -23,6 +23,7 @@ export interface Project {
   progress: number;
   duration_mode: DurationMode;
   error: string | null;
+  error_code: "youtube_blocked" | null;
   simulated: boolean;
   clips_count: number;
   created_at: string;

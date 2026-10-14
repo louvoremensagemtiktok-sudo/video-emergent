@@ -21,7 +21,11 @@ LLM_MODEL = "gpt-5.2"
 
 
 class ProviderError(Exception):
-    """Raised when an external step fails — triggers the credit refund."""
+    """Raised when an external step fails — triggers the credit refund. `code` lets the UI react (e.g. youtube_blocked)."""
+
+    def __init__(self, message: str, code: str | None = None):
+        super().__init__(message)
+        self.code = code
 
 
 # ---------- YouTube helpers ----------
@@ -80,7 +84,7 @@ YT_BLOCKED_MSG = (
 def _ytdlp_error(err: bytes) -> ProviderError:
     text = err.decode(errors="ignore")
     if re.search(r"HTTP Error 403|not a bot|Sign in to confirm|ffmpeg exited", text):
-        return ProviderError(YT_BLOCKED_MSG)
+        return ProviderError(YT_BLOCKED_MSG, code="youtube_blocked")
     if "Requested format is not available" in text:
         return ProviderError("Nenhum formato de vídeo disponível para este link do YouTube.")
     if re.search(r"Private video|Video unavailable|members-only|age", text, re.I):

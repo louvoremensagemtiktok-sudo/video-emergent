@@ -112,7 +112,7 @@ async def retry_project(project_id: str, user: dict = Depends(get_current_user))
         raise HTTPException(status_code=402, detail=f"Créditos insuficientes — são necessários {pipeline.COST}")
     await db.clips.delete_many({"project_id": project_id})
     await db.projects.update_one({"id": project_id}, {"$set": {
-        "status": "pending", "stage": "Na fila", "progress": 5, "error": None, "charged": True, "refunded": False,
+        "status": "pending", "stage": "Na fila", "progress": 5, "error": None, "error_code": None, "charged": True, "refunded": False,
         "simulated": not (assemblyai_key() and shotstack_key()),
     }})
     pipeline.start_pipeline(project_id)

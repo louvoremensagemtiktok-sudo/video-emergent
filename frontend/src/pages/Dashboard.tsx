@@ -1,7 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Clapperboard, Coins, FolderKanban, Gauge } from "lucide-react";
 import { useAnyProcessing, useClips, useMe, useProjects } from "@/lib/hooks";
-import { ImportProjectCard } from "@/components/ImportProjectCard";
+import { ImportProjectCard, type ImportSource } from "@/components/ImportProjectCard";
 import { ProjectStatusList } from "@/components/ProjectStatusList";
 import { ClipsGrid } from "@/components/ClipCard";
 import { EmptyState } from "@/components/EmptyState";
@@ -24,6 +25,19 @@ export default function Dashboard() {
   const projects = useProjects();
   const busy = useAnyProcessing();
   const clips = useClips(busy);
+  const [source, setSource] = useState<ImportSource>("youtube");
+  const [highlight, setHighlight] = useState(false);
+  const highlightTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(highlightTimer.current), []);
+
+  const goToUpload = () => {
+    setSource("upload");
+    setHighlight(true);
+    document.getElementById("novo-projeto")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => setHighlight(false), 2400);
+  };
 
   const projectList = projects.isError ? [] : projects.data ?? [];
   const clipList = clips.isError ? [] : clips.data ?? [];
@@ -32,7 +46,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <ImportProjectCard />
+      <ImportProjectCard source={source} onSourceChange={setSource} highlight={highlight} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <section className="space-y-3 lg:col-span-8">
@@ -40,7 +54,7 @@ export default function Dashboard() {
           {projects.isLoading ? (
             <div className="h-24 animate-pulse rounded-xl bg-slate-900" />
           ) : projectList.length ? (
-            <ProjectStatusList projects={projectList.slice(0, 6)} />
+            <ProjectStatusList projects={projectList.slice(0, 6)} onUploadInstead={goToUpload} />
           ) : (
             <EmptyState
               testId="empty-projects"
