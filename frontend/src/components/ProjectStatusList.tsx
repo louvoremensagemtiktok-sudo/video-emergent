@@ -34,7 +34,7 @@ function ProjectRow({ project, onUploadInstead }: { project: Project; onUploadIn
         <div className="min-w-0 flex-1">
           <p data-testid="project-title" className="truncate font-medium">{project.title}</p>
           <p className="text-xs text-slate-500">
-            {timeAgo(project.created_at)} • {project.duration_mode === "auto" ? "Automático" : `${project.duration_mode}s`}
+            {timeAgo(project.created_at)} • {project.duration_mode === "auto" ? "Automático" : `${project.duration_mode}s`} • Legenda {project.caption_style === "minimal" ? "Minimalista" : "Hormozi"}
             {project.clips_count > 0 && ` • ${project.clips_count} cortes`}
           </p>
         </div>

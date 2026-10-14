@@ -28,19 +28,26 @@ async def _owned_project(project_id: str, user: dict) -> dict:
     return proj
 
 
+async def _delete_project_clips(project_id: str) -> None:
+    async for c in db.clips.find({"project_id": project_id}, {"_id": 0, "id": 1}):
+        pipeline.delete_clip_media(c["id"])
+    await db.clips.delete_many({"project_id": project_id})
+
+
 async def _to_model(proj: dict) -> Project:
     count = await db.clips.count_documents({"project_id": proj["id"]})
     return Project(**proj, clips_count=count)
 
 
-async def _create_and_start(user: dict, video_url: str, source_type: str, title: str, duration_mode: str) -> ProjectActionResult:
+async def _create_and_start(user: dict, video_url: str, source_type: str, title: str, duration_mode: str,
+                            caption_style: str) -> ProjectActionResult:
     balance = await pipeline.charge(user["user_id"])
     if balance is None:
         raise HTTPException(status_code=402, detail=f"Créditos insuficientes — são necessários {pipeline.COST}")
     proj = {
         "id": str(uuid.uuid4()), "user_id": user["user_id"], "video_url": video_url,
         "source_type": source_type, "title": title, "status": "pending", "stage": "Na fila", "progress": 5,
-        "duration_mode": duration_mode, "error": None, "simulated": not (assemblyai_key() and shotstack_key()),
+        "duration_mode": duration_mode, "caption_style": caption_style, "error": None, "simulated": not (assemblyai_key() and shotstack_key()),
         "charged": True, "refunded": False, "created_at": pipeline.now(),
     }
     await db.projects.insert_one(dict(proj))
@@ -55,15 +62,18 @@ async def create_project(body: ProjectCreate, user: dict = Depends(get_current_u
     if not providers.youtube_id(url):
         raise HTTPException(status_code=400, detail="URL do YouTube inválida")
     title = await providers.youtube_title(url)
-    return await _create_and_start(user, url, "youtube", title, body.duration_mode)
+    return await _create_and_start(user, url, "youtube", title, body.duration_mode, body.caption_style)
 
 
 @router.post("/projects/upload", response_model=ProjectActionResult)
 async def upload_project(
-    file: UploadFile = File(...), duration_mode: str = Form("auto"), user: dict = Depends(get_current_user)
+    file: UploadFile = File(...), duration_mode: str = Form("auto"), caption_style: str = Form("hormozi"),
+    user: dict = Depends(get_current_user),
 ):
     if duration_mode not in ("30", "60", "auto"):
         raise HTTPException(status_code=400, detail="Duração inválida")
+    if caption_style not in ("hormozi", "minimal"):
+        raise HTTPException(status_code=400, detail="Estilo de legenda inválido")
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="Formato não suportado (use MP4, MOV, WEBM, MKV)")
@@ -81,7 +91,7 @@ async def upload_project(
                 raise HTTPException(status_code=413, detail="Arquivo maior que 500 MB")
             out.write(chunk)
     title = Path(file.filename or "Vídeo enviado").stem[:120]
-    return await _create_and_start(user, f"/api/files/{name}", "upload", title, duration_mode)
+    return await _create_and_start(user, f"/api/files/{name}", "upload", title, duration_mode, caption_style)
 
 
 @router.get("/projects", response_model=list[Project])
@@ -110,7 +120,7 @@ async def retry_project(project_id: str, user: dict = Depends(get_current_user))
     balance = await pipeline.charge(user["user_id"])
     if balance is None:
         raise HTTPException(status_code=402, detail=f"Créditos insuficientes — são necessários {pipeline.COST}")
-    await db.clips.delete_many({"project_id": project_id})
+    await _delete_project_clips(project_id)
     await db.projects.update_one({"id": project_id}, {"$set": {
         "status": "pending", "stage": "Na fila", "progress": 5, "error": None, "error_code": None, "charged": True, "refunded": False,
         "simulated": not (assemblyai_key() and shotstack_key()),
@@ -127,7 +137,7 @@ async def delete_project(project_id: str, user: dict = Depends(get_current_user)
     if proj["status"] in ("pending", "processing"):
         pipeline.cancel_pipeline(project_id)
         await pipeline.refund(project_id)
-    await db.clips.delete_many({"project_id": project_id})
+    await _delete_project_clips(project_id)
     await db.projects.delete_one({"id": project_id})
     (pipeline.UPLOAD_DIR / pipeline.local_media_name(proj)).unlink(missing_ok=True)
     return MessageOut(message="Projeto excluído")

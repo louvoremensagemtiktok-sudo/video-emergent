@@ -2,6 +2,7 @@
 export type ProjectStatus = "pending" | "processing" | "completed" | "failed";
 export type ClipStatus = "processing" | "ready" | "error";
 export type DurationMode = "30" | "60" | "auto";
+export type CaptionStyle = "hormozi" | "minimal";
 export type SourceType = "youtube" | "upload";
 
 export interface Profile {
@@ -22,6 +23,7 @@ export interface Project {
   stage: string;
   progress: number;
   duration_mode: DurationMode;
+  caption_style: CaptionStyle;
   error: string | null;
   error_code: "youtube_blocked" | null;
   simulated: boolean;
@@ -42,6 +44,7 @@ export interface Clip {
   hashtags: string[];
   download_url: string | null;
   preview_url: string | null;
+  thumbnail_url: string | null;
   source_url: string;
   source_type: SourceType;
   status: ClipStatus;

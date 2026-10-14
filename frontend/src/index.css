@@ -51,8 +51,14 @@
     --radius-4xl: calc(var(--radius) * 2.6);
     --animate-stripes: stripes 1s linear infinite;
     --animate-attention: attention 0.8s ease-in-out 3;
+    --animate-caption-pop: caption-pop 1.6s ease-in-out infinite;
     --animate-score-glow: score-glow 2.4s ease-in-out infinite;
     --animate-float-reel: float-reel 4s ease-in-out infinite;
+}
+
+@keyframes caption-pop {
+  0%, 55%, 100% { transform: scale(1); }
+  70% { transform: scale(1.18); }
 }
 
 @keyframes attention {

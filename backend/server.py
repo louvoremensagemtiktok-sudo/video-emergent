@@ -14,13 +14,14 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, ensure_indexes
 from routers import auth, clips, connections, projects
-from services.pipeline import recover_stale_jobs
+from services.pipeline import backfill_clip_media, recover_stale_jobs
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
     app.state.recover_task = asyncio.create_task(recover_stale_jobs())
+    app.state.backfill_task = asyncio.create_task(backfill_clip_media())  # copy 24h Shotstack renders + covers
     yield
     client.close()
 

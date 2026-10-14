@@ -77,17 +77,52 @@ async def _render_source(project: dict) -> str:
     return f"{public_base_url()}/api/files/{local_media_name(project)}"
 
 
+def clip_media_names(clip_id: str) -> tuple[str, str]:
+    return f"clip-{clip_id}.mp4", f"thumb-{clip_id}.jpg"
+
+
+async def localize_clip_media(clip: dict, remote_url: str | None, thumb_source: str | None = None) -> dict:
+    """Copy the (24h-temporary) Shotstack render into our storage and build a 9:16 cover image.
+
+    Returns the fields to $set. Failures degrade gracefully (keep the remote URL / no cover)."""
+    mp4_name, thumb_name = clip_media_names(clip["id"])
+    fields: dict = {}
+    local_src: str | None = thumb_source
+    if remote_url:
+        try:
+            await providers.download_file(remote_url, UPLOAD_DIR / mp4_name)
+            fields["download_url"] = fields["preview_url"] = f"/api/files/{mp4_name}"
+            local_src = str(UPLOAD_DIR / mp4_name)
+        except Exception as exc:  # noqa: BLE001 — keep the remote link if the copy fails
+            logger.warning("copy render %s failed: %s", clip["id"], exc)
+            local_src = local_src or remote_url
+    if local_src:
+        # Rendered clips start at 0; raw sources need the clip offset. ~1.5s in so captions are on screen.
+        at = 1.5 if remote_url else clip["start_time"] + 1.5
+        try:
+            await providers.make_thumbnail(local_src, UPLOAD_DIR / thumb_name, at)
+            fields["thumbnail_url"] = f"/api/files/{thumb_name}"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("thumbnail %s failed: %s", clip["id"], exc)
+    return fields
+
+
 async def render_clip(clip: dict, project: dict, src_url: str | None = None) -> None:
     """Render one clip; real Shotstack when a key exists, otherwise simulation."""
     try:
+        style = project.get("caption_style") or "hormozi"
         if shotstack_key():
             src = src_url or await _render_source(project)
-            url = await providers.shotstack_render(src, clip["start_time"], clip["end_time"])
-            fields = {"status": "ready", "download_url": url, "preview_url": url, "error": None, "simulated": False}
+            url = await providers.shotstack_render(src, clip["start_time"], clip["end_time"], style)
+            fields = {"status": "ready", "download_url": url, "preview_url": url, "error": None, "simulated": False,
+                      "thumbnail_url": None}
+            fields.update(await localize_clip_media(clip, url))
         elif project["source_type"] == "upload":
             base = project["video_url"]
             fields = {"status": "ready", "download_url": base,
-                      "preview_url": f"{base}#t={clip['start_time']},{clip['end_time']}", "error": None, "simulated": True}
+                      "preview_url": f"{base}#t={clip['start_time']},{clip['end_time']}", "error": None, "simulated": True,
+                      "thumbnail_url": None}
+            fields.update(await localize_clip_media(clip, None, str(UPLOAD_DIR / local_media_name(project))))
         else:
             fields = {"status": "ready", "download_url": None, "preview_url": None, "error": None, "simulated": True}
         await db.clips.update_one({"id": clip["id"]}, {"$set": fields})
@@ -96,6 +131,26 @@ async def render_clip(clip: dict, project: dict, src_url: str | None = None) -> 
     except Exception as exc:
         logger.warning("render clip %s failed: %s", clip["id"], exc)
         await db.clips.update_one({"id": clip["id"]}, {"$set": {"status": "error", "error": str(exc)[:300]}})
+
+
+def delete_clip_media(clip_id: str) -> None:
+    for name in clip_media_names(clip_id):
+        (UPLOAD_DIR / name).unlink(missing_ok=True)
+
+
+async def backfill_clip_media() -> None:
+    """One-off on boot: copy still-valid Shotstack renders locally and create missing covers."""
+    query = {"status": "ready", "$or": [{"thumbnail_url": {"$in": [None, ""]}}, {"thumbnail_url": {"$exists": False}},
+                                        {"download_url": {"$regex": "^https?://"}}]}
+    async for clip in db.clips.find(query, {"_id": 0}):
+        remote = clip.get("download_url") if str(clip.get("download_url") or "").startswith("http") else None
+        thumb_src = None
+        if not remote and clip.get("source_type") == "upload" and clip.get("download_url"):
+            thumb_src = str(UPLOAD_DIR / clip["download_url"].rsplit("/", 1)[-1])
+        fields = await localize_clip_media(clip, remote, thumb_src)
+        if fields:
+            await db.clips.update_one({"id": clip["id"]}, {"$set": fields})
+            logger.info("backfilled clip %s: %s", clip["id"], sorted(fields))
 
 
 async def _pipeline(project_id: str) -> None:

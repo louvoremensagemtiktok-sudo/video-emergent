@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ApiError, apiDelete, apiGet, apiPost, apiUpload } from "@/lib/api";
-import type { Clip, DurationMode, MessageOut, Profile, Project, ProjectActionResult } from "@/lib/types";
+import type { CaptionStyle, Clip, DurationMode, MessageOut, Profile, Project, ProjectActionResult } from "@/lib/types";
 
 export const qk = {
   me: ["me"] as const,
@@ -71,7 +71,7 @@ function onActionSuccess(invalidate: () => void) {
 export function useCreateProject() {
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (input: { video_url: string; duration_mode: DurationMode }) =>
+    mutationFn: (input: { video_url: string; duration_mode: DurationMode; caption_style: CaptionStyle }) =>
       apiPost<ProjectActionResult>("/projects", input),
     onSuccess: onActionSuccess(invalidate),
     onError: (e) => toast.error(errorMessage(e, "Não foi possível iniciar o processamento")),
@@ -86,10 +86,11 @@ export interface UploadProgress {
 export function useUploadProject(onProgress?: (p: UploadProgress) => void) {
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (input: { file: File; duration_mode: DurationMode }) => {
+    mutationFn: (input: { file: File; duration_mode: DurationMode; caption_style: CaptionStyle }) => {
       const fd = new FormData();
       fd.append("file", input.file);
       fd.append("duration_mode", input.duration_mode);
+      fd.append("caption_style", input.caption_style);
       return apiUpload<ProjectActionResult>("/projects/upload", fd, (loaded, total) => onProgress?.({ loaded, total }));
     },
     onSuccess: onActionSuccess(invalidate),

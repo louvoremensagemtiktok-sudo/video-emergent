@@ -256,23 +256,56 @@ def _shotstack_base() -> str:
     return f"https://api.shotstack.io/edit/{shotstack_env()}"
 
 
-async def shotstack_render(src_url: str, start: float, end: float) -> str:
-    length = round(end - start, 2)
-    payload = {
+# Caption presets (Shotstack rich-caption, built-in Montserrat). Output is 720x1280 (9:16 "hd").
+CAPTION_STYLES: dict[str, dict] = {
+    # Hormozi: big uppercase, heavy stroke, the spoken word pops in yellow.
+    "hormozi": {
+        "asset": {
+            "font": {"family": "Montserrat", "size": 62, "weight": 900, "color": "#FFFFFF"},
+            "style": {"textTransform": "uppercase", "lineHeight": 1.1},
+            "stroke": {"width": 6, "color": "#000000", "opacity": 1},
+            "shadow": {"offsetX": 0, "offsetY": 4, "blur": 10, "color": "#000000", "opacity": 0.6},
+            "active": {"font": {"color": "#FACC15"}},
+            "animation": {"style": "pop"},
+        },
+        "clip": {"width": 640, "height": 320, "position": "center", "offset": {"y": -0.2}},
+    },
+    # Minimal: clean sentence-case text with a soft shadow near the bottom.
+    "minimal": {
+        "asset": {
+            "font": {"family": "Montserrat", "size": 38, "weight": 600, "color": "#FFFFFF"},
+            "shadow": {"offsetX": 0, "offsetY": 2, "blur": 8, "color": "#000000", "opacity": 0.75},
+            "align": {"vertical": "bottom"},
+            "animation": {"style": "fade"},
+        },
+        "clip": {"width": 620, "height": 240, "position": "bottom", "offset": {"y": 0.08}},
+    },
+}
+
+
+def _caption_clip(style: str) -> dict:
+    preset = CAPTION_STYLES.get(style, CAPTION_STYLES["hormozi"])
+    return {"asset": {"type": "rich-caption", "src": "alias://main", **preset["asset"]},
+            "start": 0, "length": "end", **preset["clip"]}
+
+
+def shotstack_payload(src_url: str, start: float, end: float, style: str) -> dict:
+    return {
         "timeline": {
             "background": "#000000",
             "tracks": [
-                {"clips": [{"asset": {"type": "caption", "src": "alias://main",
-                                      "font": {"color": "#ffffff", "size": 44},
-                                      "background": {"color": "#000000", "opacity": 0.55, "padding": 18, "borderRadius": 12}},
-                            "position": "bottom", "offset": {"y": 0.15},
-                            "start": 0, "length": "end"}]},
+                {"clips": [_caption_clip(style)]},
                 {"clips": [{"alias": "main", "asset": {"type": "video", "src": src_url, "trim": start},
-                            "start": 0, "length": length, "fit": "crop"}]},
+                            "start": 0, "length": round(end - start, 2), "fit": "crop"}]},
             ],
         },
         "output": {"format": "mp4", "aspectRatio": "9:16", "resolution": "hd"},
     }
+
+
+async def shotstack_render(src_url: str, start: float, end: float, style: str = "hormozi") -> str:
+    """Render and return the temporary output URL (deleted by Shotstack after 24h — copy it right away)."""
+    payload = shotstack_payload(src_url, start, end, style)
     headers = {"x-api-key": shotstack_key(), "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(f"{_shotstack_base()}/render", headers=headers, json=payload)
@@ -288,3 +321,31 @@ async def shotstack_render(src_url: str, start: float, end: float) -> str:
             if resp.get("status") == "failed":
                 raise ProviderError(f"Shotstack falhou: {resp.get('error')}")
     raise ProviderError("Shotstack: tempo de renderização excedido")
+
+
+# ---------- Local media helpers (copy renders, thumbnails) ----------
+
+async def download_file(url: str, dest: Path) -> Path:
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=300)) as client:
+        async with client.stream("GET", url) as r:
+            if r.status_code != 200:
+                raise ProviderError(f"Download do render falhou ({r.status_code})")
+            with tmp.open("wb") as fh:
+                async for chunk in r.aiter_bytes(1024 * 1024):
+                    fh.write(chunk)
+    tmp.replace(dest)
+    return dest
+
+
+async def make_thumbnail(src: str, dest: Path, at: float) -> Path:
+    """Grab one frame (center-cropped to 9:16 if the source is wider) as a small JPEG."""
+    proc = await asyncio.create_subprocess_exec(
+        _ffmpeg_exe(), "-v", "error", "-y", "-ss", f"{max(0.0, at):.2f}", "-i", src, "-frames:v", "1",
+        "-vf", "crop='min(iw,ih*9/16)':ih,scale=360:-2", "-q:v", "4", str(dest),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
+    if proc.returncode != 0 or not dest.is_file():
+        raise ProviderError(f"Falha ao gerar capa: {err.decode(errors='ignore')[-200:]}")
+    return dest

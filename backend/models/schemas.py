@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 ProjectStatus = Literal["pending", "processing", "completed", "failed"]
 ClipStatus = Literal["processing", "ready", "error"]
 DurationMode = Literal["30", "60", "auto"]
+CaptionStyle = Literal["hormozi", "minimal"]
 
 
 class SignupInput(BaseModel):
@@ -31,6 +32,7 @@ class Profile(BaseModel):
 class ProjectCreate(BaseModel):
     video_url: str = Field(min_length=8)
     duration_mode: DurationMode = "auto"
+    caption_style: CaptionStyle = "hormozi"
 
 
 class Project(BaseModel):
@@ -43,6 +45,7 @@ class Project(BaseModel):
     stage: str
     progress: int
     duration_mode: DurationMode
+    caption_style: CaptionStyle = "hormozi"
     error: Optional[str] = None
     error_code: Optional[Literal["youtube_blocked"]] = None
     simulated: bool
@@ -63,6 +66,7 @@ class Clip(BaseModel):
     hashtags: list[str]
     download_url: Optional[str] = None
     preview_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     source_url: str
     source_type: Literal["youtube", "upload"]
     status: ClipStatus

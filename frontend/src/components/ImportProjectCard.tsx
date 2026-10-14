@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type FormEvent } from "react";
 import { CircleAlert, Coins, FileVideo, Link2, Loader2, ShieldCheck, Upload, Wand2, X } from "lucide-react";
 import { useCreateProject, useMe, useUploadProject, type UploadProgress } from "@/lib/hooks";
-import type { DurationMode } from "@/lib/types";
+import type { CaptionStyle, DurationMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,22 @@ const DURATIONS: { value: DurationMode; label: string }[] = [
   { value: "60", label: "60s" },
   { value: "auto", label: "Automático" },
 ];
+const CAPTION_STYLES: { value: CaptionStyle; label: string; hint: string }[] = [
+  { value: "hormozi", label: "Hormozi", hint: "Maiúsculas, palavra falada em amarelo" },
+  { value: "minimal", label: "Minimalista", hint: "Texto limpo, discreto no rodapé" },
+];
+
+function CaptionSample({ style }: { style: CaptionStyle }) {
+  if (style === "hormozi") {
+    return (
+      <span className="font-heading text-[15px] font-black uppercase leading-none tracking-tight text-white [paint-order:stroke] [-webkit-text-stroke:3px_#000]">
+        Isso muda <span className="inline-block animate-caption-pop text-[#FACC15]">tudo</span>
+      </span>
+    );
+  }
+  return <span className="text-[13px] font-semibold text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.8)]">Isso muda tudo</span>;
+}
+
 const YT_RE = /(youtube\.com\/(watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)[\w-]{11}/;
 
 export type ImportSource = "youtube" | "upload";
@@ -54,6 +70,7 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
   const [fileError, setFileError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [duration, setDuration] = useState<DurationMode>("auto");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("hormozi");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const credits = me.data?.credits;
@@ -86,11 +103,11 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
     e.preventDefault();
     if (!canSubmit) return;
     if (source === "youtube") {
-      createProject.mutate({ video_url: url.trim(), duration_mode: duration }, { onSuccess: () => setUrl("") });
+      createProject.mutate({ video_url: url.trim(), duration_mode: duration, caption_style: captionStyle }, { onSuccess: () => setUrl("") });
     } else if (file) {
       setProgress({ loaded: 0, total: file.size });
       uploadProject.mutate(
-        { file, duration_mode: duration },
+        { file, duration_mode: duration, caption_style: captionStyle },
         {
           onSuccess: clearFile,
           onSettled: () => setProgress(null),
@@ -240,6 +257,44 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
             )}
           </div>
         )}
+
+        <div className="space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Estilo da legenda</span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Estilo da legenda">
+            {CAPTION_STYLES.map((c) => {
+              const selected = captionStyle === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  data-testid={`caption-style-${c.value}`}
+                  onClick={() => setCaptionStyle(c.value)}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-xl border p-2 text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5",
+                    selected ? "border-sky-500 bg-sky-950/40" : "border-slate-800 bg-slate-900/60 hover:border-slate-600",
+                  )}
+                >
+                  <div className="grid h-14 w-24 shrink-0 place-items-center overflow-hidden rounded-lg bg-[linear-gradient(160deg,#334155_0%,#0f172a_100%)] px-1 text-center">
+                    <CaptionSample style={c.value} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={cn("text-sm font-semibold", selected ? "text-white" : "text-slate-200")}>{c.label}</p>
+                    <p className="text-xs text-slate-400">{c.hint}</p>
+                  </div>
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "ml-auto size-4 shrink-0 rounded-full border-2 transition-colors duration-200",
+                      selected ? "border-sky-400 bg-sky-400 shadow-[inset_0_0_0_3px_#0b1220]" : "border-slate-600",
+                    )}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="flex items-center gap-2">

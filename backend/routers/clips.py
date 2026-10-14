@@ -29,6 +29,7 @@ async def delete_clip(clip_id: str, user: dict = Depends(get_current_user)):
     await _owned_clip(clip_id, user)
     pipeline.cancel_clip_render(clip_id)
     await db.clips.delete_one({"id": clip_id})
+    pipeline.delete_clip_media(clip_id)
     return MessageOut(message="Corte excluído")
 
 

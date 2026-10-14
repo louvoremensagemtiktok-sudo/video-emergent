@@ -1,4 +1,5 @@
-import { Ban, Copy, Download, Loader2, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { Ban, Copy, Download, Loader2, Play, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useClipAction } from "@/lib/hooks";
 import type { Clip } from "@/lib/types";
@@ -18,7 +19,16 @@ function youtubeId(url: string) {
   return m ? m[1] : null;
 }
 
+function coverFor(clip: Clip): string | null {
+  if (clip.thumbnail_url) return clip.thumbnail_url;
+  const id = clip.preview_url ? null : youtubeId(clip.source_url);
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+}
+
 function Preview({ clip }: { clip: Clip }) {
+  const [playing, setPlaying] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+
   if (clip.status === "processing") {
     return (
       <div className="grid h-full place-items-center bg-slate-900 text-sky-300">
@@ -37,16 +47,59 @@ function Preview({ clip }: { clip: Clip }) {
       </div>
     );
   }
-  if (clip.preview_url) {
-    return <video data-testid="clip-video-preview" src={clip.preview_url} controls preload="metadata" playsInline className="h-full w-full object-cover" />;
+
+  const cover = coverFailed ? null : coverFor(clip);
+  const ytId = youtubeId(clip.source_url);
+  const canPlay = !!clip.preview_url || !!ytId;
+
+  if (cover && !playing) {
+    return (
+      <button
+        type="button"
+        data-testid="clip-cover-button"
+        aria-label={`Reproduzir ${clip.title}`}
+        disabled={!canPlay}
+        onClick={() => setPlaying(true)}
+        className="group/cover relative block h-full w-full cursor-pointer disabled:cursor-default"
+      >
+        <img
+          data-testid="clip-cover-image"
+          src={cover}
+          alt={`Capa do corte: ${clip.title}`}
+          loading="lazy"
+          onError={() => setCoverFailed(true)}
+          className="h-full w-full object-cover transition-transform duration-500 group-hover/cover:scale-[1.03]"
+        />
+        <span className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/30" />
+        {canPlay && (
+          <span className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/30 transition-[transform,background-color] duration-200 group-hover/cover:scale-110 group-hover/cover:bg-sky-500/80">
+            <Play className="ml-0.5 size-6 fill-white text-white" />
+          </span>
+        )}
+      </button>
+    );
   }
-  const id = youtubeId(clip.source_url);
-  if (id) {
+
+  if (clip.preview_url) {
+    return (
+      <video
+        data-testid="clip-video-preview"
+        src={clip.preview_url}
+        poster={cover ?? undefined}
+        controls
+        autoPlay={playing}
+        preload={playing ? "auto" : "metadata"}
+        playsInline
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+  if (ytId) {
     return (
       <iframe
         data-testid="clip-youtube-preview"
         title={clip.title}
-        src={`https://www.youtube.com/embed/${id}?start=${Math.floor(clip.start_time)}&end=${Math.ceil(clip.end_time)}&rel=0`}
+        src={`https://www.youtube.com/embed/${ytId}?start=${Math.floor(clip.start_time)}&end=${Math.ceil(clip.end_time)}&rel=0${playing ? "&autoplay=1" : ""}`}
         allow="autoplay; encrypted-media; picture-in-picture"
         allowFullScreen
         className="h-full w-full scale-[1.9]"
