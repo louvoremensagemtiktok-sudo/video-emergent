@@ -78,14 +78,19 @@ export function useCreateProject() {
   });
 }
 
-export function useUploadProject() {
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+}
+
+export function useUploadProject(onProgress?: (p: UploadProgress) => void) {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (input: { file: File; duration_mode: DurationMode }) => {
       const fd = new FormData();
       fd.append("file", input.file);
       fd.append("duration_mode", input.duration_mode);
-      return apiUpload<ProjectActionResult>("/projects/upload", fd);
+      return apiUpload<ProjectActionResult>("/projects/upload", fd, (loaded, total) => onProgress?.({ loaded, total }));
     },
     onSuccess: onActionSuccess(invalidate),
     onError: (e) => toast.error(errorMessage(e, "Falha no upload")),

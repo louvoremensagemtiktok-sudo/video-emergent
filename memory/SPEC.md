@@ -32,3 +32,6 @@ Sem dados mock: tudo do banco, empty states quando vazio.
 - Upload local de MP4 testado com APIs reais (5 cortes em ~2min) — é o caminho garantido.
 - Project.error_code (Optional["youtube_blocked"]): setado pelo pipeline via ProviderError(code=...), limpo no retry/início.
   Dashboard: projeto com youtube_blocked mostra aviso âmbar + botão "Enviar MP4 em vez disso" (btn-enviar-mp4-em-vez) → aba Upload ativa, scroll até #novo-projeto e pulso (animate-attention) por ~2.4s. Estado da aba elevado para Dashboard.
+- FOCO NO UPLOAD (decisão do usuário: sem cookies/proxy do YouTube por enquanto). Aba "Upload de MP4" é a padrão e a primeira; YouTube secundário com aviso de possível bloqueio.
+  Upload via XHR (apiUpload com onProgress) → barra/percentual real; validação no cliente (MP4/MOV/WEBM/MKV/M4V, ≤500 MB); drag & drop.
+  Ingress público testado com 450 MB OK. Backend grava em streaming e retorna 413 acima de 500 MB.

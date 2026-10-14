@@ -45,12 +45,24 @@ export const apiPatch = <T>(path: string, body?: JsonBody) =>
   request<T>("PATCH", path, body ?? null);
 export const apiDelete = <T>(path: string) => request<T>("DELETE", path);
 
-// Multipart upload (browser sets the boundary header itself).
-export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "POST", body: form });
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => null);
-    throw new ApiError(res.status, errBody);
-  }
-  return (await res.json()) as T;
+// Multipart upload via XHR so callers can show real upload progress (fetch has no upload progress events).
+export function apiUpload<T>(path: string, form: FormData, onProgress?: (loaded: number, total: number) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE}${path}`);
+    xhr.withCredentials = true;
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded, e.total);
+    xhr.onload = () => {
+      let body: unknown = null;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        body = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
+      else reject(new ApiError(xhr.status, body));
+    };
+    xhr.onerror = () => reject(new ApiError(0, { detail: "Falha de conexão durante o upload" }));
+    xhr.send(form);
+  });
 }

@@ -25,7 +25,7 @@ export default function Dashboard() {
   const projects = useProjects();
   const busy = useAnyProcessing();
   const clips = useClips(busy);
-  const [source, setSource] = useState<ImportSource>("youtube");
+  const [source, setSource] = useState<ImportSource>("upload");
   const [highlight, setHighlight] = useState(false);
   const highlightTimer = useRef<number | undefined>(undefined);
 
@@ -59,7 +59,7 @@ export default function Dashboard() {
             <EmptyState
               testId="empty-projects"
               title="Nenhum projeto ainda"
-              text="Cole um link do YouTube ou envie um vídeo acima. O andamento da transcrição, análise e renderização aparece aqui em tempo real."
+              text="Envie um vídeo MP4 acima. O andamento da transcrição, análise e renderização aparece aqui em tempo real."
             />
           )}
         </section>
@@ -89,7 +89,7 @@ export default function Dashboard() {
           <EmptyState
             testId="empty-clips"
             title="Nenhum corte gerado ainda"
-            text="Cole um link do YouTube ou envie um vídeo acima para extrair seus primeiros shorts virais!"
+            text="Envie um vídeo MP4 acima para extrair seus primeiros shorts virais!"
           />
         )}
       </section>

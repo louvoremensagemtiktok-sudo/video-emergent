@@ -1,12 +1,14 @@
-import { useRef, useState, type FormEvent } from "react";
-import { Coins, Link2, Loader2, ShieldCheck, Upload, Wand2, X } from "lucide-react";
-import { useCreateProject, useMe, useUploadProject } from "@/lib/hooks";
+import { useRef, useState, type DragEvent, type FormEvent } from "react";
+import { CircleAlert, Coins, FileVideo, Link2, Loader2, ShieldCheck, Upload, Wand2, X } from "lucide-react";
+import { useCreateProject, useMe, useUploadProject, type UploadProgress } from "@/lib/hooks";
 import type { DurationMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const COST = 3;
+const MAX_BYTES = 500 * 1024 * 1024;
+const ALLOWED_EXT = [".mp4", ".mov", ".webm", ".mkv", ".m4v"];
 const DURATIONS: { value: DurationMode; label: string }[] = [
   { value: "30", label: "30s" },
   { value: "60", label: "60s" },
@@ -16,6 +18,11 @@ const YT_RE = /(youtube\.com\/(watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)[\
 
 export type ImportSource = "youtube" | "upload";
 
+const SOURCES: { value: ImportSource; label: string; icon: typeof Upload }[] = [
+  { value: "upload", label: "Upload de MP4", icon: Upload },
+  { value: "youtube", label: "URL do YouTube", icon: Link2 },
+];
+
 interface ImportProjectCardProps {
   source: ImportSource;
   onSourceChange: (s: ImportSource) => void;
@@ -23,20 +30,57 @@ interface ImportProjectCardProps {
   highlight?: boolean;
 }
 
+export function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function validateFile(f: File): string | null {
+  const name = f.name.toLowerCase();
+  if (!ALLOWED_EXT.some((ext) => name.endsWith(ext))) return "Formato não suportado — use MP4, MOV, WEBM, MKV ou M4V.";
+  if (f.size > MAX_BYTES) return `Arquivo com ${formatBytes(f.size)} — o limite é 500 MB.`;
+  if (f.size === 0) return "O arquivo está vazio.";
+  return null;
+}
+
 export function ImportProjectCard({ source, onSourceChange, highlight = false }: ImportProjectCardProps) {
   const me = useMe();
   const createProject = useCreateProject();
-  const uploadProject = useUploadProject();
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const uploadProject = useUploadProject(setProgress);
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [duration, setDuration] = useState<DurationMode>("auto");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const credits = me.data?.credits;
   const enough = credits === undefined || credits >= COST;
-  const pending = createProject.isPending || uploadProject.isPending;
+  const uploading = uploadProject.isPending;
+  const pending = createProject.isPending || uploading;
   const urlValid = YT_RE.test(url.trim());
-  const canSubmit = enough && !pending && (source === "youtube" ? urlValid : !!file);
+  const canSubmit = enough && !pending && (source === "youtube" ? urlValid : !!file && !fileError);
+  const pct = progress && progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0;
+
+  const pickFile = (f: File | null) => {
+    setFile(f);
+    setFileError(f ? validateFile(f) : null);
+  };
+
+  const clearFile = () => {
+    pickFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    if (uploading) return;
+    const f = e.dataTransfer.files?.[0];
+    if (f) pickFile(f);
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -44,12 +88,14 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
     if (source === "youtube") {
       createProject.mutate({ video_url: url.trim(), duration_mode: duration }, { onSuccess: () => setUrl("") });
     } else if (file) {
-      uploadProject.mutate({ file, duration_mode: duration }, {
-        onSuccess: () => {
-          setFile(null);
-          if (fileRef.current) fileRef.current.value = "";
+      setProgress({ loaded: 0, total: file.size });
+      uploadProject.mutate(
+        { file, duration_mode: duration },
+        {
+          onSuccess: clearFile,
+          onSettled: () => setProgress(null),
         },
-      });
+      );
     }
   };
 
@@ -58,7 +104,7 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
       id="novo-projeto"
       data-testid="import-project-card"
       data-highlight={highlight || undefined}
-      className="relative mx-auto w-full scroll-mt-24 transition-shadow duration-500 data-[highlight]:animate-attention max-w-4xl overflow-hidden rounded-2xl border border-slate-800 bg-[linear-gradient(135deg,rgba(11,15,23,0.95)_0%,rgba(17,24,39,0.92)_100%)] p-5 shadow-[0_20px_60px_-20px_rgba(2,132,199,0.35)] sm:p-7"
+      className="relative mx-auto w-full max-w-4xl scroll-mt-24 overflow-hidden rounded-2xl border border-slate-800 bg-[linear-gradient(135deg,rgba(11,15,23,0.95)_0%,rgba(17,24,39,0.92)_100%)] p-5 shadow-[0_20px_60px_-20px_rgba(2,132,199,0.35)] transition-shadow duration-500 data-[highlight]:animate-attention sm:p-7"
     >
       <div className="pointer-events-none absolute -top-24 -right-24 size-64 rounded-full bg-sky-500/10 blur-3xl" />
       <div className="relative flex flex-wrap items-end justify-between gap-3">
@@ -67,28 +113,114 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Transforme vídeos longos em cortes virais</h1>
         </div>
         <div className="flex rounded-xl border border-slate-800 bg-slate-900/80 p-1" role="tablist">
-          {(["youtube", "upload"] as const).map((s) => (
+          {SOURCES.map(({ value, label, icon: Icon }) => (
             <button
-              key={s}
+              key={value}
               type="button"
               role="tab"
-              aria-selected={source === s}
-              data-testid={`tab-source-${s}`}
-              onClick={() => onSourceChange(s)}
+              aria-selected={source === value}
+              data-testid={`tab-source-${value}`}
+              disabled={uploading}
+              onClick={() => onSourceChange(value)}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 transition-colors duration-200",
-                source === s && "bg-sky-600 text-white",
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 transition-colors duration-200 disabled:opacity-50",
+                source === value && "bg-sky-600 text-white",
               )}
             >
-              {s === "youtube" ? <Link2 className="size-4" /> : <Upload className="size-4" />}
-              {s === "youtube" ? "URL do YouTube" : "Upload local"}
+              <Icon className="size-4" />
+              {label}
             </button>
           ))}
         </div>
       </div>
 
       <form onSubmit={submit} className="relative mt-5 space-y-4">
-        {source === "youtube" ? (
+        {source === "upload" ? (
+          <div className="space-y-1.5">
+            <div
+              data-testid="upload-dropzone"
+              role="button"
+              tabIndex={0}
+              aria-disabled={uploading}
+              onClick={() => !uploading && fileRef.current?.click()}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && !uploading && fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!uploading) setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={cn(
+                "relative flex min-h-24 cursor-pointer items-center gap-4 overflow-hidden rounded-xl border border-dashed px-4 py-4 text-sm transition-[border-color,background-color] duration-200",
+                dragging || highlight ? "border-sky-400 bg-sky-950/40" : "border-slate-700 bg-slate-950/70 hover:border-sky-500",
+                fileError && "border-rose-500/70",
+                uploading && "cursor-default",
+              )}
+            >
+              <div className={cn("grid size-12 shrink-0 place-items-center rounded-xl transition-colors duration-200", file ? "bg-sky-600/20" : "bg-slate-800")}>
+                {file ? <FileVideo className="size-6 text-sky-300" /> : <Upload className="size-6 text-sky-400" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                {file ? (
+                  <>
+                    <p data-testid="upload-file-name" className="truncate font-medium text-slate-100">{file.name}</p>
+                    <p data-testid="upload-file-size" className="text-xs text-slate-400">{formatBytes(file.size)}</p>
+                  </>
+                ) : (
+                  <>
+                    <p data-testid="upload-file-name" className="font-medium text-slate-200">
+                      {dragging ? "Solte o vídeo aqui" : "Arraste seu vídeo aqui ou clique para escolher"}
+                    </p>
+                    <p className="text-xs text-slate-500">MP4, MOV, WEBM, MKV ou M4V • até 500 MB</p>
+                  </>
+                )}
+              </div>
+              {file && !uploading && (
+                <button
+                  type="button"
+                  data-testid="btn-remove-file"
+                  aria-label="Remover arquivo"
+                  className="rounded-md p-1 text-slate-400 transition-colors duration-200 hover:bg-slate-800 hover:text-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearFile();
+                  }}
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+              {uploading && (
+                <div className="absolute inset-x-0 bottom-0 h-1 bg-slate-800">
+                  <div
+                    data-testid="upload-progress-bar"
+                    className="h-full bg-sky-400 transition-[width] duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept={ALLOWED_EXT.join(",") + ",video/*"}
+                hidden
+                data-testid="input-upload-file"
+                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            {fileError && (
+              <p data-testid="upload-file-error" className="flex items-center gap-1.5 text-xs text-rose-400">
+                <CircleAlert className="size-3.5" /> {fileError}
+              </p>
+            )}
+            {uploading && progress && (
+              <p data-testid="upload-progress-text" className="text-xs text-sky-300">
+                {pct < 100
+                  ? `Enviando ${pct}% • ${formatBytes(progress.loaded)} de ${formatBytes(progress.total)}`
+                  : "Upload concluído — iniciando o processamento…"}
+              </p>
+            )}
+          </div>
+        ) : (
           <div className="space-y-1.5">
             <Input
               data-testid="input-youtube-url"
@@ -97,53 +229,15 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
               placeholder="Cole aqui o link do YouTube — ex: https://www.youtube.com/watch?v=..."
               className="h-12 rounded-xl bg-slate-950/70 text-base"
             />
-            {url && !urlValid && (
+            {url && !urlValid ? (
               <p data-testid="url-validation-error" className="text-xs text-rose-400">
                 Informe uma URL válida do YouTube (watch, shorts ou youtu.be).
               </p>
+            ) : (
+              <p data-testid="youtube-block-hint" className="text-xs text-slate-500">
+                Alguns vídeos são bloqueados pelo YouTube para download em servidores. Se acontecer, os créditos voltam e você pode enviar o MP4.
+              </p>
             )}
-          </div>
-        ) : (
-          <div
-            data-testid="upload-dropzone"
-            onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) setFile(f);
-            }}
-            className={cn(
-              "flex h-12 cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 text-sm text-slate-400 transition-colors duration-200 hover:border-sky-500",
-              highlight ? "border-sky-400 bg-sky-950/40 text-sky-100" : "border-slate-700 bg-slate-950/70",
-            )}
-          >
-            <Upload className="size-4 shrink-0 text-sky-400" />
-            <span data-testid="upload-file-name" className="flex-1 truncate">
-              {file ? file.name : "Clique ou arraste um vídeo (MP4, MOV, WEBM — até 500 MB)"}
-            </span>
-            {file && (
-              <button
-                type="button"
-                data-testid="btn-remove-file"
-                aria-label="Remover arquivo"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFile(null);
-                  if (fileRef.current) fileRef.current.value = "";
-                }}
-              >
-                <X className="size-4" />
-              </button>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="video/*"
-              hidden
-              data-testid="input-upload-file"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
           </div>
         )}
 
@@ -196,7 +290,7 @@ export function ImportProjectCard({ source, onSourceChange, highlight = false }:
             className="h-11 rounded-xl px-6 text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5"
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
-            {pending ? "Enviando..." : "Extrair cortes"}
+            {uploading ? `Enviando ${pct}%` : pending ? "Enviando..." : "Extrair cortes"}
           </Button>
         </div>
       </form>
